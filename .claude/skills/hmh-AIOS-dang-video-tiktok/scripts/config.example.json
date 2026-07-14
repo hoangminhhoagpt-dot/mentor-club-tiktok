@@ -1,0 +1,22 @@
+{
+  "_huong_dan": "Copy thành config.local.json rồi điền. TUYỆT ĐỐI không commit config.local.json.",
+
+  "larkDomain": "https://open.larksuite.com",
+  "larkAppId": "cli_xxxxxxxxxxxxxxx",
+  "larkAppSecret": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+  "appToken": "bascnXXXXXXXXXXXXXXXXXX",
+
+  "tablePost": "tblXXXXXXXXXXXX",
+  "_tablePost": "Bảng '15.2 Đăng video TikTok'. Chạy setup-tables.mjs (ở skill sync) để tạo & lấy id.",
+
+  "clientKey": "awxxxxxxxxxxxxxx",
+  "clientSecret": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+  "redirectUri": "http://localhost:5173/callback",
+  "_tiktok": "App TikTok phải BẬT sản phẩm 'Content Posting API' + scope video.upload. Xem docs/02-tao-app-tiktok.md",
+
+  "tokenFile": "../../hmh-AIOS-sync-tiktok-lark/scripts/config.local.json",
+  "_tokenFile": "DÙNG CHUNG refresh token với skill sync (1 app TikTok = 1 token). Bỏ khoá này nếu muốn token riêng.",
+
+  "refreshToken": "",
+  "accessToken": ""
+}

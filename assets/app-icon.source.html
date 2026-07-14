@@ -1,0 +1,57 @@
+<!doctype html>
+<meta charset="utf-8">
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  html,body { width:1024px; height:1024px; }
+  body {
+    display:flex; align-items:center; justify-content:center;
+    background: radial-gradient(circle at 32% 26%, #262633 0%, #0e0e13 72%);
+    font-family: "Segoe UI", system-ui, sans-serif;
+  }
+  .wrap { position:relative; width:1024px; height:1024px; display:flex; align-items:center; justify-content:center; }
+  .glow {
+    position:absolute; top:190px; width:640px; height:640px; border-radius:50%;
+    background: radial-gradient(circle, rgba(37,244,238,.22) 0%, rgba(254,44,85,.15) 48%, transparent 70%);
+    filter: blur(34px);
+  }
+  svg { position:absolute; top:212px; width:470px; height:470px; overflow:visible; }
+
+  .name {
+    position:absolute; bottom:132px; left:50%; transform:translateX(-50%);
+    color:#fff; font-size:66px; font-weight:800; letter-spacing:9px; text-transform:uppercase;
+  }
+  .sub {
+    position:absolute; bottom:74px; left:50%; transform:translateX(-50%);
+    color:#7f8090; font-size:29px; font-weight:600; letter-spacing:5px;
+  }
+</style>
+<div class="wrap">
+  <div class="glow"></div>
+
+  <svg viewBox="0 0 200 200">
+    <defs>
+      <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+        <stop offset="0%"  stop-color="#25f4ee"/>
+        <stop offset="100%" stop-color="#fe2c55"/>
+      </linearGradient>
+    </defs>
+
+    <!-- khung bảng dữ liệu (Lark Base) -->
+    <rect x="16" y="16" width="168" height="168" rx="30"
+          fill="none" stroke="url(#g)" stroke-width="11"/>
+    <!-- các dòng của bảng -->
+    <line x1="16" y1="66" x2="184" y2="66" stroke="url(#g)" stroke-width="8" opacity=".55"/>
+    <line x1="66" y1="66" x2="66" y2="184" stroke="url(#g)" stroke-width="8" opacity=".55"/>
+
+    <!-- nút play (video) nằm trong ô lớn -->
+    <path d="M104 96 L150 124 L104 152 Z" fill="#ffffff"/>
+
+    <!-- 3 ô dữ liệu nhỏ bên trái -->
+    <rect x="34" y="92"  width="16" height="16" rx="4" fill="#ffffff" opacity=".9"/>
+    <rect x="34" y="122" width="16" height="16" rx="4" fill="#ffffff" opacity=".6"/>
+    <rect x="34" y="152" width="16" height="16" rx="4" fill="#ffffff" opacity=".35"/>
+  </svg>
+
+  <div class="name">Mentor Club</div>
+  <div class="sub">TIKTOK · LARK BASE</div>
+</div>

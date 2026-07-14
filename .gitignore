@@ -1,0 +1,9 @@
+# TUYỆT ĐỐI không commit file này — nó chứa App Secret + refresh token.
+config.local.json
+**/config.local.json
+
+.env
+node_modules/
+output/
+*.mp4
+*.mov

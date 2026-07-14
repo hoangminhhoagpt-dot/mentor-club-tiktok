@@ -1,0 +1,58 @@
+# Đăng video từ Lark Base "15.2 Đăng video TikTok" -> HỘP THƯ TikTok.
+#
+# Video vào mục thông báo/nháp của app TikTok; chủ kênh mở app, dán caption, bấm Đăng.
+# (TikTok KHÔNG cho đăng công khai tự động khi app chưa qua audit — xem docs/06-gioi-han.md)
+#
+# Chạy bằng 3 cách:
+#   1. Bấm tay      — tab Actions → dang-video-tiktok → "Run workflow".
+#   2. Gọi qua HTTP — POST https://api.github.com/repos/<user>/<repo>/dispatches
+#      body: {"event_type":"dang-video-tiktok","client_payload":{"record_id":"recXXX"}}
+#      → record_id: chỉ đăng ĐÚNG 1 dòng đó (dùng cho NÚT BẤM trên Lark Base).
+#      → bỏ record_id: đăng HẾT các dòng "Chờ đăng".
+#   3. Theo lịch    — bỏ comment phần schedule bên dưới nếu muốn tự quét mỗi giờ.
+name: dang-video-tiktok
+
+on:
+  repository_dispatch:
+    types: [dang-video-tiktok]
+  workflow_dispatch:
+    inputs:
+      record_id:
+        description: "recXXX — chỉ đăng 1 dòng này (bỏ trống = đăng hết dòng Chờ đăng)"
+        required: false
+      limit:
+        description: "Tối đa N video mỗi lần chạy"
+        required: false
+  # schedule:
+  #   - cron: "0 * * * *"      # bật nếu muốn tự quét bảng mỗi giờ
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Đăng video Lark -> TikTok
+        env:
+          # ---- BÍ MẬT → GitHub Secrets ----
+          LARK_APP_SECRET:      ${{ secrets.LARK_APP_SECRET }}
+          TIKTOK_CLIENT_SECRET: ${{ secrets.TIKTOK_CLIENT_SECRET }}
+          TIKTOK_REFRESH_TOKEN: ${{ secrets.TIKTOK_REFRESH_TOKEN }}
+          # ---- KHÔNG bí mật → Variables (client_payload ghi đè nếu có) ----
+          LARK_APP_ID:       ${{ vars.LARK_APP_ID }}
+          LARK_DOMAIN:       ${{ github.event.client_payload.domain  || vars.LARK_DOMAIN }}
+          LARK_BASE_ID:      ${{ github.event.client_payload.base_id || vars.LARK_BASE_ID }}
+          TABLE_POST:        ${{ github.event.client_payload.table_post || vars.TABLE_POST }}
+          TIKTOK_CLIENT_KEY: ${{ vars.TIKTOK_CLIENT_KEY }}
+          # record_id: script đọc thẳng từ biến môi trường này
+          RECORD_ID:         ${{ github.event.client_payload.record_id || inputs.record_id }}
+        run: |
+          LIMIT="${{ github.event.client_payload.limit || inputs.limit }}"
+          if [ -n "$LIMIT" ]; then
+            node ".claude/skills/hmh-AIOS-dang-video-tiktok/scripts/post-video-tiktok.mjs" --limit "$LIMIT"
+          else
+            node ".claude/skills/hmh-AIOS-dang-video-tiktok/scripts/post-video-tiktok.mjs"
+          fi

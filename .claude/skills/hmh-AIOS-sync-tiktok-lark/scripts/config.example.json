@@ -1,0 +1,28 @@
+{
+  "_huong_dan": "Copy file này thành config.local.json rồi điền. TUYỆT ĐỐI không commit config.local.json.",
+
+  "larkDomain": "https://open.larksuite.com",
+  "_larkDomain": "Lark quốc tế: https://open.larksuite.com | Feishu (Trung Quốc): https://open.feishu.cn",
+
+  "larkAppId": "cli_xxxxxxxxxxxxxxx",
+  "larkAppSecret": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+  "_lark": "Lark Developer Console → app của bạn → Credentials & Basic Info. Xem docs/01-tao-app-lark.md",
+
+  "appToken": "bascnXXXXXXXXXXXXXXXXXX",
+  "_appToken": "ID của Base — lấy trong URL: https://.../base/<appToken>?table=tblXXX",
+
+  "tableTiktok": "tblXXXXXXXXXXXX",
+  "tableProfile": "tblXXXXXXXXXXXX",
+  "tablePost": "tblXXXXXXXXXXXX",
+  "_tables": "Chạy `node setup-tables.mjs` để TỰ TẠO 3 bảng — script in ra đúng 3 id này.",
+
+  "clientKey": "awxxxxxxxxxxxxxx",
+  "clientSecret": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+  "redirectUri": "http://localhost:5173/callback",
+  "_tiktok": "https://developers.tiktok.com → app → Credentials. redirectUri phải trùng CHÍNH XÁC cái đăng ký trong Login Kit. Xem docs/02-tao-app-tiktok.md",
+
+  "refreshToken": "",
+  "_refreshToken": "Chạy `node get-tiktok-token.mjs auth` rồi `node get-tiktok-token.mjs exchange \"<code>\"` — script tự điền vào đây.",
+
+  "accessToken": ""
+}

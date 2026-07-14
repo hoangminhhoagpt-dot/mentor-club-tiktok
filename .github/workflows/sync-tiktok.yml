@@ -1,0 +1,66 @@
+# Kéo số liệu video TikTok -> Lark Base "15.1 Data Tiktok".
+#
+# Chạy bằng 3 cách:
+#   1. TỰ ĐỘNG mỗi ngày  — theo cron bên dưới (01:00 UTC = 08:00 giờ VN).
+#   2. Bấm tay           — tab Actions → sync-tiktok → "Run workflow".
+#   3. Gọi qua HTTP      — POST https://api.github.com/repos/<user>/<repo>/dispatches
+#      body: {"event_type":"sync-tiktok","client_payload":{"base_id":"...","table_tiktok":"..."}}
+#      (dùng cho nút bấm / automation trong Lark Base — xem docs/05-lark-automation.md)
+#
+# client_payload (giá trị KHÔNG bí mật) ghi đè Variables → 1 repo phục vụ nhiều khách/nhiều base.
+name: sync-tiktok
+
+on:
+  schedule:
+    - cron: "0 1 * * *"        # 08:00 giờ VN mỗi ngày. GitHub cron chạy theo UTC và có thể trễ vài phút.
+  repository_dispatch:
+    types: [sync-tiktok]
+  workflow_dispatch:
+    inputs:
+      limit:
+        description: "Chỉ lấy N video đầu (bỏ trống = lấy hết)"
+        required: false
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      # Profile (follower/like/số video) — chạy trước, nhanh. Thiếu TABLE_PROFILE thì bỏ qua.
+      - name: Sync PROFILE TikTok -> Lark (15.3)
+        if: ${{ vars.TABLE_PROFILE != '' || github.event.client_payload.table_profile != '' }}
+        continue-on-error: true      # profile lỗi (vd thiếu scope) KHÔNG được chặn phần kéo video
+        env:
+          LARK_APP_SECRET:      ${{ secrets.LARK_APP_SECRET }}
+          TIKTOK_CLIENT_SECRET: ${{ secrets.TIKTOK_CLIENT_SECRET }}
+          TIKTOK_REFRESH_TOKEN: ${{ secrets.TIKTOK_REFRESH_TOKEN }}
+          LARK_APP_ID:       ${{ vars.LARK_APP_ID }}
+          LARK_DOMAIN:       ${{ github.event.client_payload.domain  || vars.LARK_DOMAIN }}
+          LARK_BASE_ID:      ${{ github.event.client_payload.base_id || vars.LARK_BASE_ID }}
+          TABLE_PROFILE:     ${{ github.event.client_payload.table_profile || vars.TABLE_PROFILE }}
+          TIKTOK_CLIENT_KEY: ${{ vars.TIKTOK_CLIENT_KEY }}
+        run: node ".claude/skills/hmh-AIOS-sync-tiktok-lark/scripts/sync-profile-tiktok.mjs"
+
+      - name: Sync VIDEO TikTok -> Lark (15.1)
+        env:
+          # ---- BÍ MẬT → GitHub Secrets ----
+          LARK_APP_SECRET:      ${{ secrets.LARK_APP_SECRET }}
+          TIKTOK_CLIENT_SECRET: ${{ secrets.TIKTOK_CLIENT_SECRET }}
+          TIKTOK_REFRESH_TOKEN: ${{ secrets.TIKTOK_REFRESH_TOKEN }}
+          # ---- KHÔNG bí mật → Variables (client_payload ghi đè nếu có) ----
+          LARK_APP_ID:       ${{ vars.LARK_APP_ID }}
+          LARK_DOMAIN:       ${{ github.event.client_payload.domain    || vars.LARK_DOMAIN }}
+          LARK_BASE_ID:      ${{ github.event.client_payload.base_id   || vars.LARK_BASE_ID }}
+          TABLE_TIKTOK:      ${{ github.event.client_payload.table_tiktok || vars.TABLE_TIKTOK }}
+          TIKTOK_CLIENT_KEY: ${{ vars.TIKTOK_CLIENT_KEY }}
+        run: |
+          LIMIT="${{ github.event.client_payload.limit || inputs.limit }}"
+          if [ -n "$LIMIT" ]; then
+            node ".claude/skills/hmh-AIOS-sync-tiktok-lark/scripts/sync-tiktok-lark.mjs" --limit "$LIMIT"
+          else
+            node ".claude/skills/hmh-AIOS-sync-tiktok-lark/scripts/sync-tiktok-lark.mjs"
+          fi
