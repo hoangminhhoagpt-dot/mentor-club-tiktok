@@ -1,0 +1,66 @@
+# ============================================================================
+# itto.yaml — HỢP ĐỒNG ITTO của gói mentor-club-tiktok (TikTok ⇄ Lark Base)
+# Gói này BỌC 2 skill (mảnh ①) ngay trong repo → workflow chạy script theo path skill.
+# ZERO-DEPENDENCY: soát bằng `node check-itto.mjs` (không cần npm install / gói yaml).
+# ============================================================================
+
+package: mentor-club-tiktok
+version: 1.0.0
+skills:
+  - hmh-AIOS-sync-tiktok-lark      # kéo số liệu (15.1 video, 15.3 profile)
+  - hmh-AIOS-dang-video-tiktok     # đăng video (15.2 → hộp thư TikTok)
+
+# ── I — INPUT: chuẩn bị TRƯỚC khi chạy ──
+input:
+  base_mau:
+    template_url: "https://<link-nhan-ban-Base-TikTok>"   # <đổi khi bàn giao>
+    setup: node .claude/skills/hmh-AIOS-sync-tiktok-lark/scripts/setup-tables.mjs
+    tables:
+      - "15.1 Data Tiktok   → Variable TABLE_TIKTOK"
+      - "15.2 Đăng video TikTok → Variable TABLE_POST"
+      - "15.3 Profile Tiktok → Variable TABLE_PROFILE"
+  secrets:                         # GitHub Secrets (hoặc config.local.json khi chạy máy)
+    - LARK_APP_SECRET
+    - TIKTOK_CLIENT_SECRET
+    - TIKTOK_REFRESH_TOKEN
+  variables:                       # GitHub Variables (không bí mật; client_payload ghi đè)
+    - LARK_APP_ID
+    - LARK_DOMAIN
+    - LARK_BASE_ID
+    - TABLE_TIKTOK
+    - TABLE_POST
+    - TABLE_PROFILE
+    - TIKTOK_CLIENT_KEY
+  phieu_input: docs/00-PHIEU-INPUT.md
+  preflight: node .claude/skills/hmh-AIOS-sync-tiktok-lark/scripts/check-setup.mjs  # + node check-itto.mjs
+
+# ── T — TECH ──
+tech:
+  - Lark Base
+  - TikTok Display API (kéo số liệu video/profile)
+  - TikTok Content Posting API (đăng vào HỘP THƯ, scope video.upload)
+  - GitHub Actions
+  - "zero-dependency (Node >= 18, không npm install)"
+
+# ── T — TOOL ──
+tool:
+  setup:   node .claude/skills/hmh-AIOS-sync-tiktok-lark/scripts/setup-tables.mjs
+  auth:    node .claude/skills/hmh-AIOS-sync-tiktok-lark/scripts/get-tiktok-token.mjs
+  profile: node .claude/skills/hmh-AIOS-sync-tiktok-lark/scripts/sync-profile-tiktok.mjs
+  triggers:
+    - event_type: sync-tiktok
+      script: node .claude/skills/hmh-AIOS-sync-tiktok-lark/scripts/sync-tiktok-lark.mjs
+      desc: "Kéo video 15.1 (+ profile 15.3) — cron 08:00 VN / nút / HTTP"
+    - event_type: dang-video-tiktok
+      script: node .claude/skills/hmh-AIOS-dang-video-tiktok/scripts/post-video-tiktok.mjs
+      desc: "Đăng 1 video 15.2 vào hộp thư TikTok theo record_id (nút 'Đăng ngay')"
+
+# ── O — OUTPUT ──
+output:
+  writes_back:
+    - "15.1 upsert video theo item_id (view/like/comment/share/caption/thumbnail)"
+    - "15.3 upsert profile theo open_id (follower/tổng like/số video/avatar/bio)"
+    - "15.2 Publish ID + trạng thái; tự BỎ TICK 'Đăng ngay' (không đăng lặp)"
+  proof: "tab Actions xanh + 15.1/15.3 có dữ liệu + 15.2 có Publish ID"
+  note: "Đăng = vào HỘP THƯ TikTok (app chưa audit); caption KHÔNG qua API — mở app dán tay."
+  multi_tenant: "1 repo phục vụ nhiều base: truyền base_id/table_* qua client_payload."
