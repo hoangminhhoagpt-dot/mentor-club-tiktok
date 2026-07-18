@@ -237,23 +237,53 @@ export async function larkApi(CFG, method, apiPath, body) {
   throw new Error(`Lark ${apiPath}: hết lượt thử.`);
 }
 
-export async function uploadThumb(CFG, imgUrl, fileName) {
+/** Revision của Base — cần cho "extra" khi Base bật quyền nâng cao. */
+let APP_REV;
+async function appRevision(CFG) {
+  if (APP_REV !== undefined) return APP_REV;
+  try {
+    const d = await larkApi(CFG, "GET", `/open-apis/bitable/v1/apps/${CFG.appToken}`);
+    APP_REV = d.app?.revision ?? null;
+  } catch { APP_REV = null; }
+  return APP_REV;
+}
+
+/**
+ * Tải ảnh từ URL rồi upload lên Lark drive → file_token.
+ * Base BẬT QUYỀN NÂNG CAO thì upload_all cần kèm "extra" (bitablePerm) mới ghi được media,
+ * nên thử cách thường trước, hỏng thì thử lại kèm extra=bitablePerm.rev (cần tableId của
+ * bảng chứa cột ảnh: video→tableTiktok, avatar→tableProfile).
+ */
+export async function uploadThumb(CFG, imgUrl, fileName, tableId) {
   const ir = await fetch(imgUrl);
   if (!ir.ok) throw new Error(`Tải thumbnail lỗi ${ir.status}`);
   const buf = Buffer.from(await ir.arrayBuffer());
-  const token = await larkToken(CFG);
-  const form = new FormData();
-  form.append("file_name", fileName);
-  form.append("parent_type", "bitable_image");
-  form.append("parent_node", CFG.appToken);
-  form.append("size", String(buf.length));
-  form.append("file", new Blob([buf]), fileName);
-  const r = await fetch(`${CFG.larkDomain}/open-apis/drive/v1/medias/upload_all`, {
-    method: "POST", headers: { Authorization: `Bearer ${token}` }, body: form,
-  });
-  const j = await r.json();
-  if (j.code !== 0) throw new Error(`Upload media lỗi: ${j.code} ${j.msg}`);
-  return j.data.file_token;
+
+  const attempts = [null];
+  const rev = await appRevision(CFG);
+  if (tableId && rev != null) attempts.push(JSON.stringify({ bitablePerm: { tableId, rev } }));
+
+  let last = "";
+  for (const extra of attempts) {
+    const token = await larkToken(CFG);
+    const form = new FormData();
+    form.append("file_name", fileName);
+    form.append("parent_type", "bitable_image");
+    form.append("parent_node", CFG.appToken);
+    form.append("size", String(buf.length));
+    if (extra) form.append("extra", extra);
+    form.append("file", new Blob([buf]), fileName);
+    const r = await fetch(`${CFG.larkDomain}/open-apis/drive/v1/medias/upload_all`, {
+      method: "POST", headers: { Authorization: `Bearer ${token}` }, body: form,
+    });
+    const j = await r.json();
+    if (j.code === 0) {
+      if (extra) console.log(`  (upload ảnh qua extra=bitablePerm — Base đang bật quyền nâng cao)`);
+      return j.data.file_token;
+    }
+    last = `${j.code} ${j.msg}`;
+  }
+  throw new Error(`Upload media lỗi: ${last}`);
 }
 
 export async function listAllRecords(CFG, tableId) {

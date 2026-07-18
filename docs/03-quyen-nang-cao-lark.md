@@ -47,6 +47,8 @@ Thấy công tắc đang **BẬT** → bạn đang dính đúng trường hợp 
 
 Chỉ làm nếu Base không chứa dữ liệu nhạy cảm và bạn hiểu hệ quả: mọi cộng tác viên sẽ quay về quyền phẳng như cũ.
 
+> 📎 **Về file đính kèm** (video khi đăng, thumbnail/avatar khi sync): script **tự thử kèm `extra=bitablePerm`** lúc tải/upload media, nên khi Base bật Quyền nâng cao bạn **chỉ cần** gán bot vào một vai trò đủ quyền (Cách A) — không phải sửa gì trong code. Nếu vẫn "thiếu file", kiểm tra vai trò đó có bật quyền **Xem/Sửa cột đính kèm** (Video / Thumbnail / Avatar) chưa.
+
 ---
 
 ## Kiểm tra lại

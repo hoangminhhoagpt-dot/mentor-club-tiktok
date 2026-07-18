@@ -71,7 +71,7 @@ async function main() {
   const hasAvatar = cur?.fields["avatar"]?.length;
   if (avatarUrl && (REFRESH_AVATAR || !hasAvatar)) {
     try {
-      const ft = await uploadThumb(CFG, avatarUrl, `avatar-${user.open_id}.jpg`);
+      const ft = await uploadThumb(CFG, avatarUrl, `avatar-${user.open_id}.jpg`, CFG.tableProfile);
       fields["avatar"] = [{ file_token: ft }];
     } catch (e) { console.log(`  ! avatar lỗi: ${e.message}`); }
   }

@@ -237,18 +237,90 @@ export async function larkApi(CFG, method, apiPath, body) {
   throw new Error(`Lark ${apiPath}: hết lượt thử.`);
 }
 
-/** Tải attachment từ Lark về đĩa; trả về kích thước (bytes). */
-export async function downloadAttachment(CFG, fileToken, destPath) {
+/** Revision của Base — cần cho "extra" khi Base bật quyền nâng cao. */
+let APP_REV;
+async function appRevision(CFG) {
+  if (APP_REV !== undefined) return APP_REV;
+  try {
+    const d = await larkApi(CFG, "GET", `/open-apis/bitable/v1/apps/${CFG.appToken}`);
+    APP_REV = d.app?.revision ?? null;
+  } catch { APP_REV = null; }
+  return APP_REV;
+}
+
+let FIELD_IDS = {};
+async function fieldId(CFG, tableId, fieldName) {
+  if (!FIELD_IDS[tableId]) {
+    try {
+      const d = await larkApi(CFG, "GET", `/open-apis/bitable/v1/apps/${CFG.appToken}/tables/${tableId}/fields?page_size=200`);
+      FIELD_IDS[tableId] = {};
+      for (const f of d.items || []) FIELD_IDS[tableId][f.field_name] = f.field_id;
+    } catch { FIELD_IDS[tableId] = {}; }
+  }
+  return FIELD_IDS[tableId][fieldName];
+}
+
+const withExtra = (CFG, fileToken, extra) =>
+  `${CFG.larkDomain}/open-apis/drive/v1/medias/${fileToken}/download?extra=${encodeURIComponent(JSON.stringify(extra))}`;
+
+/**
+ * Tải attachment từ Lark về đĩa; trả về kích thước (bytes).
+ * Base BẬT QUYỀN NÂNG CAO thì /medias/{token}/download bị chặn nếu thiếu query "extra"
+ * mang bitablePerm → thử lần lượt nhiều cách, cách nào ra file THẬT (binary) thì dùng.
+ * `att` nhận cả object attachment (có url/tmp_url/file_token) lẫn chuỗi token trần.
+ * `ctx` = { tableId, recordId, fieldName } để dựng "extra" khi cần.
+ */
+export async function downloadAttachment(CFG, att, destPath, ctx = {}) {
   const token = await larkToken(CFG);
-  const r = await fetch(`${CFG.larkDomain}/open-apis/drive/v1/medias/${fileToken}/download`, {
-    headers: { Authorization: `Bearer ${token}` },
-  });
-  if (!r.ok) throw new Error(`Tải video từ Lark lỗi ${r.status}`);
-  await new Promise((res, rej) => {
-    const ws = fs.createWriteStream(destPath);
-    Readable.fromWeb(r.body).pipe(ws); ws.on("finish", res); ws.on("error", rej);
-  });
-  return fs.statSync(destPath).size;
+  const fileToken = typeof att === "string" ? att : att.file_token;
+  const plain = `${CFG.larkDomain}/open-apis/drive/v1/medias/${fileToken}/download`;
+  const urls = [{ label: "không extra", url: plain }];
+
+  const { tableId, recordId, fieldName } = ctx;
+  if (tableId && recordId && fieldName) {
+    const fld = await fieldId(CFG, tableId, fieldName);
+    if (fld) urls.push({
+      label: "extra=bitablePerm.attachments",
+      url: withExtra(CFG, fileToken, { bitablePerm: { tableId, attachments: { [fld]: { [recordId]: [fileToken] } } } }),
+    });
+  }
+  if (tableId) {
+    const rev = await appRevision(CFG);
+    if (rev != null) urls.push({
+      label: "extra=bitablePerm.rev",
+      url: withExtra(CFG, fileToken, { bitablePerm: { tableId, rev } }),
+    });
+  }
+  if (typeof att === "object" && att) {
+    for (const [label, u] of [["att.url", att.url], ["att.tmp_url", att.tmp_url]]) {
+      if (u && !urls.some((x) => x.url === u)) urls.push({ label, url: u });
+    }
+  }
+
+  const errs = [];
+  for (const { label, url } of urls) {
+    const r = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+    // Lỗi quyền được Lark trả dạng JSON (đôi khi status vẫn 200); file thật là binary.
+    const ct = r.headers.get("content-type") || "";
+    if (!r.ok || ct.includes("application/json")) {
+      let msg = `HTTP ${r.status}`;
+      try { const j = await r.json(); msg = `${j.code} ${j.msg}`; } catch { /* body không phải JSON */ }
+      errs.push(`${label}: ${msg}`);
+      continue;
+    }
+    await new Promise((res, rej) => {
+      const ws = fs.createWriteStream(destPath);
+      Readable.fromWeb(r.body).pipe(ws); ws.on("finish", res); ws.on("error", rej);
+    });
+    const size = fs.statSync(destPath).size;
+    if (size === 0) { errs.push(`${label}: file 0 byte`); continue; }
+    if (label !== "không extra") console.log(`  (tải qua ${label} — Base đang bật quyền nâng cao)`);
+    return size;
+  }
+  throw new Error(
+    `Tải video từ Lark thất bại. Đã thử ${errs.length} cách: ${errs.join(" | ")}. ` +
+    `Nếu Base bật QUYỀN NÂNG CAO, vào Base > Quyền nâng cao cấp cho app (bot) một vai trò có quyền xem/tải bảng này. Xem docs/03-quyen-nang-cao-lark.md`
+  );
 }
 
 export async function listAllRecords(CFG, tableId) {

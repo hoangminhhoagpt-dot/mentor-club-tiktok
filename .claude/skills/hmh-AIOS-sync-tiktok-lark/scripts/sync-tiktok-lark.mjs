@@ -89,7 +89,7 @@ async function main() {
     const hasThumb = cur?.fields["thumbnail"]?.length;
     if (v.cover_image_url && (args.refreshThumbs || !hasThumb)) {
       try {
-        const ft = await uploadThumb(CFG, v.cover_image_url, `${v.id}.jpg`);
+        const ft = await uploadThumb(CFG, v.cover_image_url, `${v.id}.jpg`, CFG.tableTiktok);
         fields["thumbnail"] = [{ file_token: ft }];
       } catch (e) { log(`  ! thumb ${v.id} lỗi: ${e.message}`); }
     }

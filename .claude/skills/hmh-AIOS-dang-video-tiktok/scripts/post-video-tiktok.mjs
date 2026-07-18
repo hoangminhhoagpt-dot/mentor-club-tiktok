@@ -80,7 +80,7 @@ async function main() {
     try {
       await updateRecord(CFG, CFG.tablePost, row.record_id, { "Trạng thái": "Đang đẩy" });
       console.log("  ↓ tải video từ Lark...");
-      await downloadAttachment(CFG, att.file_token, tmp);
+      await downloadAttachment(CFG, att, tmp, { tableId: CFG.tablePost, recordId: row.record_id, fieldName: "Video" });
 
       console.log("  ↑ đẩy lên hộp thư TikTok...");
       const publishId = await uploadFileToInbox(CFG, tmp, mimeOf(att.name));
