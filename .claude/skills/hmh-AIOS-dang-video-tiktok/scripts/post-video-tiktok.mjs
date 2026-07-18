@@ -25,6 +25,7 @@ import {
   loadConfig, requireKeys, sleep,
   downloadAttachment, listAllRecords, updateRecord,
   uploadFileToInbox, fetchStatus,
+  queryCreatorInfo, uploadFileDirectPost,
 } from "./lib.mjs";
 
 const CFG = loadConfig();
@@ -34,8 +35,21 @@ const DRY = process.argv.includes("--dry-run");
 const FORCE = process.argv.includes("--force");   // cho phép đẩy lại dòng đã có Publish ID
 const RECORD_ID = (arg("--record-id") || process.env.RECORD_ID || "").trim();
 
+// Direct Post: đăng THẲNG lên hồ sơ kèm caption/hashtag (cần scope video.publish).
+// Bật bằng --direct, hoặc config "directPost": true, hoặc biến môi trường DIRECT_POST=1.
+// LƯU Ý: app chưa audit → TikTok ép privacy = SELF_ONLY (chỉ mình xem), tối đa 5 user/24h.
+const DIRECT = process.argv.includes("--direct") || CFG.directPost === true || process.env.DIRECT_POST === "1";
+const PRIVACY_WANT = (arg("--privacy") || CFG.privacyLevel || process.env.PRIVACY_LEVEL || "SELF_ONLY").trim();
+
 const F_TRIGGER = "Đăng ngay";
 const txt = (v, d = "") => (v == null ? d : (typeof v === "object" ? (v.text ?? d) : String(v)));
+// Gom caption + hashtag từ bảng để làm "title" cho Direct Post (TikTok tự tách #tag & @mention trong title).
+const captionOf = (f) => {
+  const body = txt(f["Caption"]).trim() || txt(f["Nội dung"]).trim()
+            || txt(f["Caption gợi ý"]).trim() || txt(f["Tiêu đề"]).trim();
+  const tags = txt(f["Hashtag"]).trim() || txt(f["Hashtags"]).trim() || txt(f["Thẻ"]).trim();
+  return [body, tags].filter(Boolean).join("\n").trim().slice(0, 2150);
+};
 const hasVideo = (r) => Array.isArray(r.fields["Video"]) && r.fields["Video"].length > 0;
 const posted = (r) => !!txt(r.fields["Publish ID"]).trim();
 const mimeOf = (name) => {
@@ -46,6 +60,9 @@ const mimeOf = (name) => {
 async function main() {
   const need = DRY ? ["tablePost"] : ["tablePost", "clientKey", "clientSecret", "refreshToken"];
   requireKeys(CFG, need);
+  console.log(DIRECT
+    ? `Chế độ: DIRECT POST (đăng thẳng + caption/hashtag). Privacy mong muốn: ${PRIVACY_WANT}. ⚠ Cần token có scope video.publish.`
+    : "Chế độ: Upload to Inbox (video vào hộp thư, caption dán tay trong app).");
 
   const rows = await listAllRecords(CFG, CFG.tablePost);
   let pending;
@@ -82,29 +99,69 @@ async function main() {
       console.log("  ↓ tải video từ Lark...");
       await downloadAttachment(CFG, att, tmp, { tableId: CFG.tablePost, recordId: row.record_id, fieldName: "Video" });
 
-      console.log("  ↑ đẩy lên hộp thư TikTok...");
-      const publishId = await uploadFileToInbox(CFG, tmp, mimeOf(att.name));
+      let publishId, ttStatus = "PROCESSING_UPLOAD", failReason = "";
 
-      let ttStatus = "PROCESSING_UPLOAD", failReason = "";
-      for (let i = 0; i < 8; i++) {
-        await sleep(2500);
-        const s = await fetchStatus(CFG, publishId);
-        ttStatus = s.status || ttStatus;
-        failReason = s.fail_reason || "";
-        if (ttStatus === "SEND_TO_USER_INBOX" || ttStatus === "FAILED") break;
+      if (DIRECT) {
+        // ---- Direct Post: đăng thẳng lên hồ sơ, KÈM caption/hashtag ----
+        const caption = captionOf(f);
+        const ci = await queryCreatorInfo(CFG);   // bắt buộc gọi trước, lấy quyền riêng tư cho phép
+        const opts = Array.isArray(ci.privacy_level_options) && ci.privacy_level_options.length
+          ? ci.privacy_level_options : ["SELF_ONLY"];
+        const privacy = opts.includes(PRIVACY_WANT) ? PRIVACY_WANT : opts[0];
+        console.log(`  ⓘ Tài khoản: ${ci.creator_nickname || "?"} (@${ci.creator_username || "?"}) — quyền cho phép: ${opts.join(", ")}`);
+        if (privacy !== "PUBLIC_TO_EVERYONE")
+          console.log(`  ⚠ App chưa audit → đăng chế độ ${privacy} (chỉ mình xem). Muốn công khai phải qua audit TikTok.`);
+        console.log(`  ↑ Direct Post lên hồ sơ (caption ${caption.length} ký tự)...`);
+        publishId = await uploadFileDirectPost(CFG, tmp, mimeOf(att.name), {
+          title: caption,
+          privacy_level: privacy,
+          disable_comment: !!ci.comment_disabled,
+          disable_duet: !!ci.duet_disabled,
+          disable_stitch: !!ci.stitch_disabled,
+          video_cover_timestamp_ms: 1000,
+        });
+        for (let i = 0; i < 20; i++) {            // publish lâu hơn inbox → poll nhiều hơn
+          await sleep(3000);
+          const s = await fetchStatus(CFG, publishId);
+          ttStatus = s.status || ttStatus;
+          failReason = s.fail_reason || "";
+          if (ttStatus === "PUBLISH_COMPLETE" || ttStatus === "FAILED") break;
+        }
+        if (ttStatus === "FAILED") throw new Error(`TikTok đăng thất bại: ${failReason || "FAILED"}`);
+        await updateRecord(CFG, CFG.tablePost, row.record_id, {
+          "Trạng thái": ttStatus === "PUBLISH_COMPLETE" ? `Đã đăng (${privacy})` : "Đang xử lý",
+          "Trạng thái TikTok": ttStatus,
+          "Publish ID": publishId,
+          "Ngày đẩy": Date.now(),
+          "Ghi chú lỗi": "",
+          [F_TRIGGER]: false,
+        });
+        console.log(`  ✔ Direct Post xong (publish_id=${publishId}, status=${ttStatus}).`);
+        if (privacy !== "PUBLIC_TO_EVERYONE")
+          console.log("    → Video ở chế độ riêng tư trên hồ sơ (đúng giới hạn app chưa audit). Vào TikTok kiểm tra caption đã lên chưa.");
+      } else {
+        // ---- Upload to Inbox: vào hộp thư/nháp, chủ kênh dán caption tay ----
+        console.log("  ↑ đẩy lên hộp thư TikTok...");
+        publishId = await uploadFileToInbox(CFG, tmp, mimeOf(att.name));
+        for (let i = 0; i < 8; i++) {
+          await sleep(2500);
+          const s = await fetchStatus(CFG, publishId);
+          ttStatus = s.status || ttStatus;
+          failReason = s.fail_reason || "";
+          if (ttStatus === "SEND_TO_USER_INBOX" || ttStatus === "FAILED") break;
+        }
+        if (ttStatus === "FAILED") throw new Error(`TikTok xử lý thất bại: ${failReason || "FAILED"}`);
+        await updateRecord(CFG, CFG.tablePost, row.record_id, {
+          "Trạng thái": "Đã vào hộp thư",
+          "Trạng thái TikTok": ttStatus,
+          "Publish ID": publishId,
+          "Ngày đẩy": Date.now(),
+          "Ghi chú lỗi": "",
+          [F_TRIGGER]: false,          // bỏ tick -> automation không kích hoạt lại
+        });
+        console.log(`  ✔ Đã vào hộp thư TikTok (publish_id=${publishId}).`);
+        console.log("    → Mở app TikTok, vào thông báo/nháp để dán caption & bấm Đăng.");
       }
-      if (ttStatus === "FAILED") throw new Error(`TikTok xử lý thất bại: ${failReason || "FAILED"}`);
-
-      await updateRecord(CFG, CFG.tablePost, row.record_id, {
-        "Trạng thái": "Đã vào hộp thư",
-        "Trạng thái TikTok": ttStatus,
-        "Publish ID": publishId,
-        "Ngày đẩy": Date.now(),
-        "Ghi chú lỗi": "",
-        [F_TRIGGER]: false,          // bỏ tick -> automation không kích hoạt lại
-      });
-      console.log(`  ✔ Đã vào hộp thư TikTok (publish_id=${publishId}).`);
-      console.log("    → Mở app TikTok, vào thông báo/nháp để dán caption & bấm Đăng.");
     } catch (e) {
       console.log(`  ✗ Lỗi: ${e.message}`);
       try {

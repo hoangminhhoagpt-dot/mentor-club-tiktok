@@ -15,7 +15,7 @@
  * Cần điền trước trong config.local.json: clientKey, clientSecret, redirectUri.
  * ⚠️ TikTok app phải BẬT sản phẩm "Content Posting API" và scope video.upload thì mới cấp được quyền này.
  */
-import { loadConfig, requireKeys, authorizeUrl, exchangeCode, patchConfig, makePkce } from "./lib.mjs";
+import { loadConfig, requireKeys, authorizeUrl, exchangeCode, patchConfig, makePkce, FULL_SCOPE } from "./lib.mjs";
 
 const cmd = process.argv[2];
 const CFG = loadConfig();
@@ -25,7 +25,9 @@ if (cmd === "auth") {
   const { verifier, challenge } = makePkce();
   patchConfig({ _pkceVerifier: verifier });
   console.log("\nMở link này trong trình duyệt (đăng nhập đúng tài khoản TikTok cần đăng):\n");
-  console.log(authorizeUrl(CFG, { codeChallenge: challenge, scope: "video.upload" }));
+  // Xin TRỌN scope (gồm video.upload + video.publish) để 1 token dùng chung cho cả inbox lẫn Direct Post,
+  // đồng thời KHÔNG làm mất video.list của skill sync (cùng dùng chung token).
+  console.log(authorizeUrl(CFG, { codeChallenge: challenge, scope: FULL_SCOPE }));
   console.log('\nSau khi đồng ý, copy giá trị "code" trong URL redirect rồi chạy:');
   console.log('   node get-tiktok-token.mjs exchange "<code>"\n');
 } else if (cmd === "exchange") {
@@ -38,12 +40,15 @@ if (cmd === "auth") {
   patchConfig({ refreshToken: j.refresh_token, accessToken: "", _pkceVerifier: "" });
   console.log("✔ Đã lưu refreshToken vào config.local.json");
   console.log(`  open_id: ${j.open_id}`);
-  console.log(`  scope  : ${j.scope}   (cần có video.upload)`);
+  console.log(`  scope  : ${j.scope}   (cần có video.upload; muốn Direct Post cần thêm video.publish)`);
   console.log(`  access_token hết hạn sau ${j.expires_in}s; refresh_token sau ${j.refresh_expires_in}s (~365 ngày).`);
-  if (!String(j.scope || "").includes("video.upload")) {
+  const sc = String(j.scope || "");
+  if (!sc.includes("video.upload"))
     console.log("\n⚠️ Scope KHÔNG có video.upload — vào TikTok for Developers bật Content Posting API + scope video.upload rồi làm lại.");
-  }
-  console.log("\nGiờ đăng thử: node post-video-tiktok.mjs --limit 1");
+  if (!sc.includes("video.publish"))
+    console.log("\n⚠️ Scope KHÔNG có video.publish — Direct Post (đăng kèm caption) sẽ lỗi. Vào TikTok bật thêm scope video.publish + bấm 'Apply changes' rồi làm lại 'auth'.");
+  console.log("\nĐăng thử hộp thư:   node post-video-tiktok.mjs --limit 1");
+  console.log("Đăng thử Direct:    node post-video-tiktok.mjs --limit 1 --direct   (app chưa audit → video sẽ ở chế độ riêng tư)");
 } else {
   console.log('Dùng: node get-tiktok-token.mjs auth   |   node get-tiktok-token.mjs exchange "<code>"');
   process.exit(1);

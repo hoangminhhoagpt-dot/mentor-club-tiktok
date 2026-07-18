@@ -14,6 +14,11 @@
   "redirectUri": "http://localhost:5173/callback",
   "_tiktok": "App TikTok phải BẬT sản phẩm 'Content Posting API' + scope video.upload. Xem docs/02-tao-app-tiktok.md",
 
+  "directPost": false,
+  "_directPost": "true = Direct Post (đăng thẳng lên hồ sơ, KÈM caption/hashtag từ cột 'Caption gợi ý'). CẦN scope video.publish. App CHƯA audit → TikTok ép privacy SELF_ONLY (chỉ mình xem) + ≤5 user/24h. false = giữ luồng hộp thư (dán caption tay).",
+  "privacyLevel": "SELF_ONLY",
+  "_privacyLevel": "PUBLIC_TO_EVERYONE | MUTUAL_FOLLOW_FRIENDS | SELF_ONLY. App chưa audit chỉ nhận SELF_ONLY; script tự lùi về mức được phép nếu chọn cao hơn.",
+
   "tokenFile": "../../hmh-AIOS-sync-tiktok-lark/scripts/config.local.json",
   "_tokenFile": "DÙNG CHUNG refresh token với skill sync (1 app TikTok = 1 token). Bỏ khoá này nếu muốn token riêng.",
 

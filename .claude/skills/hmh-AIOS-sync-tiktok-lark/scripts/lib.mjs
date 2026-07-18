@@ -63,7 +63,9 @@ export function makePkce() {
 //   video.list                    -> bảng 15.1 số liệu video
 //   video.upload                  -> bảng 15.2 đăng video lên hộp thư TikTok
 // Scope nào chưa bật trong app TikTok thì TikTok chỉ đơn giản không cấp — script tự dò và bỏ qua.
-export const FULL_SCOPE = "user.info.basic,user.info.profile,user.info.stats,video.list,video.upload";
+// Gộp đủ scope cho CẢ 2 skill TikTok (sync + đăng) vì dùng CHUNG 1 refresh token:
+// video.list (đọc số liệu) + video.upload (đẩy hộp thư) + video.publish (Direct Post kèm caption).
+export const FULL_SCOPE = "user.info.basic,user.info.profile,user.info.stats,video.list,video.upload,video.publish";
 
 export function authorizeUrl(CFG, { codeChallenge, scope = FULL_SCOPE, state = "hmh" } = {}) {
   const u = new URL("https://www.tiktok.com/v2/auth/authorize/");

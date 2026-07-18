@@ -73,7 +73,9 @@ export function makePkce() {
 // ---------- TikTok OAuth ----------
 // Đăng vào Hộp thư/nháp cần scope video.upload (KHÔNG cần app audit).
 // Xin TRỌN scope cho cả 2 chiều trong 1 lần ủy quyền — dùng chung 1 refresh token cho mọi script.
-export const FULL_SCOPE = "user.info.basic,user.info.profile,user.info.stats,video.list,video.upload";
+// video.publish = Direct Post (đăng thẳng lên hồ sơ kèm caption). CẦN app bật scope này +
+// (để đăng CÔNG KHAI) app phải qua audit. Chưa audit vẫn xin được token, nhưng bị ép SELF_ONLY.
+export const FULL_SCOPE = "user.info.basic,user.info.profile,user.info.stats,video.list,video.upload,video.publish";
 
 export function authorizeUrl(CFG, { codeChallenge, scope = FULL_SCOPE, state = "hmh" } = {}) {
   const u = new URL("https://www.tiktok.com/v2/auth/authorize/");
@@ -204,7 +206,69 @@ export async function fetchStatus(CFG, publishId) {
     body: JSON.stringify({ publish_id: publishId }),
   });
   const j = await r.json();
-  return j.data || {}; // { status: PROCESSING_UPLOAD | SEND_TO_USER_INBOX | FAILED ..., fail_reason }
+  return j.data || {}; // { status: PROCESSING_UPLOAD | SEND_TO_USER_INBOX | PUBLISH_COMPLETE | FAILED ..., fail_reason }
+}
+
+// ---------- TikTok Content Posting API — Direct Post ----------
+// Đăng THẲNG lên hồ sơ, có caption/hashtag (title). CẦN scope video.publish.
+// App CHƯA audit (sandbox): TikTok ÉP privacy = SELF_ONLY (chỉ mình xem) + ≤5 user/24h.
+// → Đây là cách KIỂM THỬ "caption có đẩy lên được không"; đăng công khai phải chờ audit.
+
+/** Bắt buộc gọi TRƯỚC Direct Post: lấy nickname + các mức riêng tư ĐƯỢC PHÉP của tài khoản. */
+export async function queryCreatorInfo(CFG) {
+  const at = await getAccessToken(CFG);
+  const r = await fetch(`${TT_OPEN}/v2/post/publish/creator_info/query/`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${at}`, "Content-Type": "application/json; charset=UTF-8" },
+  });
+  const j = await r.json();
+  const err = j.error || {};
+  if (err.code && err.code !== "ok") {
+    throw new Error(`TikTok creator_info lỗi: ${err.code} — ${err.message || ""} (log_id ${err.log_id || "?"})`);
+  }
+  return j.data || {}; // { creator_nickname, creator_username, privacy_level_options[], comment_disabled, duet_disabled, stitch_disabled, max_video_post_duration_sec }
+}
+
+/** Init Direct Post (FILE_UPLOAD) kèm post_info (title/caption + privacy). Trả publish_id + upload_url. */
+export async function directPostInit(CFG, { videoSize, chunkSize, totalChunkCount, postInfo }) {
+  const at = await getAccessToken(CFG);
+  const r = await fetch(`${TT_OPEN}/v2/post/publish/video/init/`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${at}`, "Content-Type": "application/json; charset=UTF-8" },
+    body: JSON.stringify({
+      post_info: postInfo,
+      source_info: { source: "FILE_UPLOAD", video_size: videoSize, chunk_size: chunkSize, total_chunk_count: totalChunkCount },
+    }),
+  });
+  const j = await r.json();
+  const err = j.error || {};
+  if (err.code && err.code !== "ok") {
+    throw new Error(`TikTok direct-post init lỗi: ${err.code} — ${err.message || ""} (log_id ${err.log_id || "?"})`);
+  }
+  if (!j.data || !j.data.upload_url) throw new Error(`TikTok direct-post init: thiếu upload_url — ${JSON.stringify(j)}`);
+  return j.data; // { publish_id, upload_url }
+}
+
+/** Đọc file, init Direct Post rồi đẩy toàn bộ theo mảnh 5–64MB. Trả publish_id. */
+export async function uploadFileDirectPost(CFG, filePath, mime = "video/mp4", postInfo = {}) {
+  const size = fs.statSync(filePath).size;
+  let chunkSize, totalChunkCount;
+  if (size <= MAX_CHUNK) { chunkSize = size; totalChunkCount = 1; }
+  else { chunkSize = MAX_CHUNK; totalChunkCount = Math.floor(size / chunkSize); }
+
+  const { publish_id, upload_url } = await directPostInit(CFG, { videoSize: size, chunkSize, totalChunkCount, postInfo });
+  const fd = fs.openSync(filePath, "r");
+  try {
+    for (let i = 0; i < totalChunkCount; i++) {
+      const start = i * chunkSize;
+      const end = i === totalChunkCount - 1 ? size : start + chunkSize; // mảnh cuối lấy hết phần còn lại
+      const len = end - start;
+      const buf = Buffer.alloc(len);
+      fs.readSync(fd, buf, 0, len, start);
+      await uploadChunk(upload_url, buf, start, end - 1, size, mime);
+    }
+  } finally { fs.closeSync(fd); }
+  return publish_id;
 }
 
 // ---------- Lark Base ----------

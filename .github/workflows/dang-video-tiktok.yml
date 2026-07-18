@@ -23,6 +23,9 @@ on:
       limit:
         description: "Tối đa N video mỗi lần chạy"
         required: false
+      direct:
+        description: "true = Direct Post (đăng thẳng + caption, cần scope video.publish; app chưa audit → riêng tư). Bỏ trống = hộp thư"
+        required: false
   # schedule:
   #   - cron: "0 * * * *"      # bật nếu muốn tự quét bảng mỗi giờ
 
@@ -49,6 +52,9 @@ jobs:
           TIKTOK_CLIENT_KEY: ${{ vars.TIKTOK_CLIENT_KEY }}
           # record_id: script đọc thẳng từ biến môi trường này
           RECORD_ID:         ${{ github.event.client_payload.record_id || inputs.record_id }}
+          # DIRECT_POST=1 → đăng thẳng lên hồ sơ + caption (cần token có scope video.publish).
+          # Bật khi client_payload.direct='true' / input 'direct'='true', hoặc đặt Variable DIRECT_POST=1 cho mặc định.
+          DIRECT_POST:       ${{ (github.event.client_payload.direct || inputs.direct) == 'true' && '1' || vars.DIRECT_POST }}
         run: |
           LIMIT="${{ github.event.client_payload.limit || inputs.limit }}"
           if [ -n "$LIMIT" ]; then
